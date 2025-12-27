@@ -23,12 +23,8 @@ jobs:
           script: |
             set -e
             
-            # Install dependencies if needed
+            # Install dependencies
             which git || sudo yum install -y git
-            which docker-compose || sudo /usr/local/bin/docker-compose --version || {
-              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-            }
             
             # Ensure Docker is running
             sudo systemctl start docker
@@ -36,16 +32,27 @@ jobs:
             # Start Redis if not running
             docker ps | grep redis || docker run -d --name redis --restart always -p 6379:6379 redis:7-alpine redis-server --appendonly yes
             
-            # Remove old directory and fresh clone
+            # Clone/update repo
             rm -rf ~/relay-server
             git clone https://github.com/${{ github.repository }}.git ~/relay-server
             cd ~/relay-server
             
-            # Build and run
-            sudo /usr/local/bin/docker-compose down || true
-            sudo /usr/local/bin/docker-compose up -d --build
+            # Build with plain docker (not compose)
+            sudo docker stop relay-server || true
+            sudo docker rm relay-server || true
+            sudo docker build -t silence-relay .
             
-            # Wait for build and check health
+            # Run the server
+            sudo docker run -d \
+              --name relay-server \
+              --restart always \
+              --network host \
+              -e BIND_ADDR=0.0.0.0:8080 \
+              -e REDIS_URL=redis://127.0.0.1:6379 \
+              -e RUST_LOG=relay_server=info \
+              silence-relay
+            
+            # Wait and check health
             echo "Waiting for server to start..."
-            sleep 60
+            sleep 30
             curl -f http://localhost:8080/health && echo "✅ Deployment successful!"
