@@ -19,12 +19,13 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 20m
           script: |
             set -e
             
             # Install dependencies if needed
             which git || sudo yum install -y git
-            which docker-compose || {
+            which docker-compose || sudo /usr/local/bin/docker-compose --version || {
               sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
             }
@@ -35,19 +36,16 @@ jobs:
             # Start Redis if not running
             docker ps | grep redis || docker run -d --name redis --restart always -p 6379:6379 redis:7-alpine redis-server --appendonly yes
             
-            # Clone/update repo
-            if [ -d ~/relay-server ]; then
-              cd ~/relay-server && git pull origin main
-            else
-              git clone https://github.com/${{ github.repository }}.git ~/relay-server
-            fi
-            
+            # Remove old directory and fresh clone
+            rm -rf ~/relay-server
+            git clone https://github.com/${{ github.repository }}.git ~/relay-server
             cd ~/relay-server
             
             # Build and run
-            sudo docker-compose down || true
-            sudo docker-compose up -d --build
+            sudo /usr/local/bin/docker-compose down || true
+            sudo /usr/local/bin/docker-compose up -d --build
             
-            # Wait and check health
-            sleep 30
+            # Wait for build and check health
+            echo "Waiting for server to start..."
+            sleep 60
             curl -f http://localhost:8080/health && echo "✅ Deployment successful!"
