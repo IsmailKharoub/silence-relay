@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  relay:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - BIND_ADDR=0.0.0.0:8080
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=relay_server=debug
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+
