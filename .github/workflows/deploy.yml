@@ -20,6 +20,15 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
+            
+            # Install dependencies if needed
+            which git || sudo yum install -y git
+            which docker-compose || {
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            }
+            
             # Ensure Docker is running
             sudo systemctl start docker
             
@@ -28,18 +37,17 @@ jobs:
             
             # Clone/update repo
             if [ -d ~/relay-server ]; then
-              cd ~/relay-server && git pull
+              cd ~/relay-server && git pull origin main
             else
               git clone https://github.com/${{ github.repository }}.git ~/relay-server
             fi
             
             cd ~/relay-server
             
-            # Build and run with docker-compose
-            docker-compose down || true
-            docker-compose up -d --build
+            # Build and run
+            sudo docker-compose down || true
+            sudo docker-compose up -d --build
             
             # Wait and check health
-            sleep 15
-            curl -f http://localhost:8080/health && echo "Deployment successful!"
-
+            sleep 30
+            curl -f http://localhost:8080/health && echo "✅ Deployment successful!"
